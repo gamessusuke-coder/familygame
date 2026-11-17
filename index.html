@@ -60,12 +60,49 @@
   .chk { font-size: 12px; cursor: pointer; }
   .chk span { font-size: 10px; color: #a07a4f; }
   .chk input { accent-color: #f08a3c; transform: scale(1.2); margin-right: 4px; }
+  /* ===== タイトル画面 ===== */
+  #title { position: fixed; inset: 0; z-index: 50; background: radial-gradient(circle at 50% 35%, #fff7e6 0%, #fde4c4 70%, #f7cf9c 100%);
+           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
+           padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)); transition: opacity .35s; }
+  #title.hide { opacity: 0; pointer-events: none; }
+  #titleCv { width: min(88vw, 380px, 46dvh); aspect-ratio: 1; }
+  .logo { font-size: clamp(36px, 11vw, 54px); font-weight: 900; margin: 0; color: #f08a3c; letter-spacing: .06em;
+          text-shadow: 0 4px 0 #c66a26, 0 6px 12px rgba(90,59,28,.25); -webkit-text-stroke: 2px #fff; paint-order: stroke fill; }
+  .sub { margin: -6px 0 0; font-size: 13px; color: #a07a4f; }
+  .modeBtns { display: flex; flex-direction: column; gap: 12px; width: min(80vw, 320px); }
+  .modeBtn { display: flex; flex-direction: column; align-items: center; padding: 12px 20px; font-size: 20px; }
+  .modeBtn small { font-size: 11px; font-weight: normal; opacity: .9; margin-top: 2px; }
+  .modeBtn.hard { background: #8a4b2a; box-shadow: 0 3px 0 #5e3018; }
+  .modeTag { display: block; width: fit-content; white-space: nowrap; margin-top: 2px; font-size: 11px; background: #f08a3c; color: #fff; border-radius: 999px; padding: 2px 8px; vertical-align: middle; margin-left: 4px; }
+  .modeTag.hard { background: #8a4b2a; }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+  .tbest { font-size: 13px; color: #a07a4f; }
+  .tbest b { font-size: 18px; color: #5a3b1c; }
+  .over .btns2 { display: flex; gap: 10px; }
+  .ghostw { background: #fff; color: #a0602a; box-shadow: 0 3px 0 #e6cfa8; }
+  .hrow { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  .hrow .modeTag { margin-top: 0; }
+  .backBtn { font-size: 11px; padding: 3px 10px; background: #fff; color: #a0602a; box-shadow: 0 2px 0 #e6cfa8; border: 1px solid #e6cfa8; }
 </style>
 </head>
 <body>
+<div id="title">
+  <canvas id="titleCv" width="760" height="760"></canvas>
+  <h1 class="logo">かぞくゲーム</h1>
+  <p class="sub">おなじ家族をくっつけて、さいごは…うんこ！？</p>
+  <div class="modeBtns">
+    <button id="startSimple" class="modeBtn"><b>シンプルモード</b><small>まるい当たり判定</small></button>
+    <button id="startHard" class="modeBtn hard"><b>ハードモード</b><small>写真のかたちどおりの当たり判定</small></button>
+  </div>
+  <label class="chk"><input type="checkbox" id="titleWaiwai"> <b>わいわいモード</b>（全員ずっとしゃべる）</label>
+  <div class="tbest">ベスト　シンプル <b id="titleBestS">0</b>　／　ハード <b id="titleBestH">0</b></div>
+</div>
 <div class="wrap">
   <header>
-    <h1>かぞくゲーム</h1>
+    <div>
+      <h1>かぞくゲーム</h1>
+      <div class="hrow"><span id="modeTag" class="modeTag">シンプル</span><button id="backBtn" class="backBtn">◀ タイトル</button></div>
+    </div>
     <div class="stats">
       <div class="box"><small>スコア</small><b id="score">0</b></div>
       <div class="box"><small>ベスト</small><b id="best">0</b></div>
@@ -74,14 +111,19 @@
   </header>
   <div class="stage">
     <canvas id="game"></canvas>
+    <div class="over" id="confirm">
+      <h2 style="font-size:22px">タイトルにもどる？</h2>
+      <p>いまのゲームは終了します</p>
+      <div class="btns2"><button id="cfYes">もどる</button><button id="cfNo" class="ghostw">つづける</button></div>
+    </div>
     <div class="over" id="over">
       <h2>ゲームオーバー</h2>
       <p id="finalScore"></p>
-      <button id="retry">もういちど</button>
+      <div class="btns2"><button id="retry">もういちど</button><button id="toTitle" class="ghostw">タイトルへ</button></div>
     </div>
   </div>
   <div class="legend">
-    <p>しんかの順番（同じ人がくっつくと次の人に！最後はうんこ）／ アイコンをタップすると顔写真・ボイスを設定できます</p>
+    <p>しんかの順番（同じ人がくっつくと次の人に！最後はうんこ）／ アイコンをタップすると写真・ボイスを設定できます。ハードモードは背景を切り抜いた写真（透過PNG）を使うと、その形が当たり判定になります</p>
     <div class="chain" id="chain"></div>
     <input type="file" id="file" accept="image/*" hidden>
     <input type="file" id="vfile" accept="audio/*" hidden>
@@ -92,39 +134,42 @@
         <button class="small" id="bPlay">▶ 試聴</button>
         <button class="small ghost" id="bVoice">声のファイルを選ぶ</button>
         <button class="small ghost" id="bClearVoice" hidden>合成音声に戻す</button>
-        <button class="small ghost" id="bPhoto">顔写真を選ぶ</button>
+        <button class="small ghost" id="bPhoto">写真を選ぶ</button>
       </div>
     </div>
     <div class="row">
       <label class="chk"><input type="checkbox" id="waiwai"> <b>わいわいモード</b><br><span>画面にいる全員がずっとしゃべり続けます</span></label>
-      <div style="display:flex;gap:8px;align-items:center"><label class="chk"><input type="checkbox" id="mute"> 消音</label><button id="reset" class="small">リセット</button></div>
+      <div style="display:flex;gap:8px;align-items:center"><label class="chk" id="hitWrap" hidden><input type="checkbox" id="showHit"> 判定表示</label><label class="chk"><input type="checkbox" id="mute"> 消音</label><button id="reset" class="small">リセット</button></div>
     </div>
     <div class="row"><span>クリック / タップで落とす・ドラッグで位置合わせ</span></div>
   </div>
 </div>
 
+<script src="matter.min.js"></script>
 <script>
 // ===== 人物定義（スイカゲームの11段階に対応） =====
 const PEOPLE = [
-  { name: "三男",     line: "バーブー",   pitch: 1.9, rate: 1.2, r: 22,  bg: "#ffd6e0", skin: "#ffdcc2", hair: "#5a3b1c", style: "toddler", voice: "voices/sannan.mp3" },
-  { name: "次男",     line: "ぶいぶいちん",   pitch: 1.6, rate: 1.2, r: 32,  bg: "#b8e0ff", skin: "#ffd9bd", hair: "#3b2614", style: "boy", voice: "voices/jinan.mp3" },
-  { name: "長男",     line: "おとうしゃま",   pitch: 1.2, rate: 1.1, r: 45,  bg: "#9ad3a5", skin: "#f7cfae", hair: "#2a1a0d", style: "teenboy", voice: "voices/chonan.mp3" },
-  { name: "お母さん", line: "知らんけど",     pitch: 1.3, rate: 1.0, r: 62,  bg: "#ffa69e", skin: "#f8d0ae", hair: "#3a2210", style: "mom", voice: "voices/okasan.mp3" },
-  { name: "お父さん", line: "あいざいます！", pitch: 0.8, rate: 1.0, r: 84,  bg: "#8fb8ff", skin: "#efc39d", hair: "#1f140a", style: "dad", voice: "voices/otosan.mp3" },
-  { name: "うんこ",   line: "ぶりっ！",     pitch: 0.6, rate: 0.9, r: 110, bg: "#ffe9a8", skin: "#9a6233", hair: "#7a4a22", style: "poop" },
+  { name: "三男",     line: "バーブー",   pitch: 1.9, rate: 1.2, r: 28,  bg: "#ffd6e0", skin: "#ffdcc2", hair: "#5a3b1c", style: "toddler", voice: "voices/sannan.mp3" },
+  { name: "次男",     line: "ぶいぶいちん",   pitch: 1.6, rate: 1.2, r: 40,  bg: "#b8e0ff", skin: "#ffd9bd", hair: "#3b2614", style: "boy", voice: "voices/jinan.mp3" },
+  { name: "長男",     line: "おとうしゃま",   pitch: 1.2, rate: 1.1, r: 56,  bg: "#9ad3a5", skin: "#f7cfae", hair: "#2a1a0d", style: "teenboy", voice: "voices/chonan.mp3" },
+  { name: "お母さん", line: "知らんけど",     pitch: 1.3, rate: 1.0, r: 76,  bg: "#ffa69e", skin: "#f8d0ae", hair: "#3a2210", style: "mom", voice: "voices/okasan.mp3" },
+  { name: "お父さん", line: "あいざいます！", pitch: 0.8, rate: 1.0, r: 102,  bg: "#8fb8ff", skin: "#efc39d", hair: "#1f140a", style: "dad", voice: "voices/otosan.mp3" },
+  { name: "うんこ",   line: "ぶりっ！",     pitch: 0.6, rate: 0.9, r: 130, bg: "#ffe9a8", skin: "#9a6233", hair: "#7a4a22", style: "poop" },
 ];
 const photos = new Array(PEOPLE.length).fill(null);
 
 // ===== 人物の描画 =====
-function drawPerson(ctx, x, y, r, lv) {
+function drawPerson(ctx, x, y, r, lv, opt = {}) {
   const p = PEOPLE[lv];
   ctx.save();
   // 外枠
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = p.bg; ctx.fill();
-  ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "rgba(90,59,28,.35)"; ctx.stroke();
+  if (!opt.noBg) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = p.bg; ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "rgba(90,59,28,.35)"; ctx.stroke();
+  }
 
-  if (photos[lv]) {
+  if (photos[lv] && !opt.noPhoto) {
     const img = photos[lv], ir = r * 0.88;
     ctx.save(); ctx.beginPath(); ctx.arc(x, y, ir, 0, Math.PI * 2); ctx.clip();
     const s = Math.max(ir * 2 / img.width, ir * 2 / img.height);
@@ -316,11 +361,14 @@ const DPR = Math.min(2, window.devicePixelRatio || 1);
 cv.width = W * DPR; cv.height = H * DPR; cv.style.aspectRatio = W + "/" + H;
 ctx.scale(DPR, DPR);
 
-let bodies, score, best = 0, cur, next, aimX, canDrop, over, nid, effects, overTimer;
+let started = false, mode = "simple";
+const bestBy = { simple: loadBest("kazoku-best"), hard: loadBest("kazoku-best-hard") };
+let bodies, score, cur, next, aimX, canDrop, over, nid, effects, overTimer;
 const SPAWN_MAX = 3; // 落ちてくるのは三男・次男・長男からランダム
 const rnd = () => Math.floor(Math.random() * SPAWN_MAX);
 
 function reset() {
+  if (engine) { Matter.Composite.clear(engine.world, false); Matter.Composite.add(engine.world, walls); }
   bodies = []; effects = []; score = 0; nid = 0; over = false; overTimer = 0;
   cur = rnd(); next = rnd(); aimX = W / 2; canDrop = true;
   document.getElementById("over").classList.remove("show");
@@ -328,27 +376,45 @@ function reset() {
 }
 function updateUI() {
   document.getElementById("score").textContent = score;
-  if (score > best) best = score;
-  document.getElementById("best").textContent = best;
+  if (score > bestBy[mode]) { bestBy[mode] = score; saveBest(mode === "hard" ? "kazoku-best-hard" : "kazoku-best", score); }
+  document.getElementById("best").textContent = bestBy[mode];
   const n = document.getElementById("nextCv"), nc = n.getContext("2d");
   n.width = 80; n.height = 80; nc.clearRect(0, 0, 80, 80);
-  drawPerson(nc, 40, 40, 34, next);
+  drawThumb(nc, 40, 40, 34, next);
 }
 
+function loadBest(k) { try { return +localStorage.getItem(k) || 0; } catch (e) { return 0; } }
+function saveBest(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function drop() {
-  if (!canDrop || over) return;
-  const r = PEOPLE[cur].r;
-  const x = Math.max(r, Math.min(W - r, aimX));
-  const nb = { id: nid++, x, y: TOP, vx: 0, vy: 0, r, lv: cur, born: performance.now() };
-  bodies.push(nb);
+  if (!started || !canDrop || over || paused) return;
+  let nb;
+  if (mode === "hard") {
+    const a = aimPos();
+    nb = hardSpawn(cur, a.x, a.y);
+  } else {
+    const r = PEOPLE[cur].r;
+    const x = Math.max(r, Math.min(W - r, aimX));
+    nb = { id: nid++, x, y: TOP, vx: 0, vy: 0, r, lv: cur, born: performance.now() };
+    bodies.push(nb);
+  }
   playVoice(cur, { body: nb });
   cur = next; next = rnd(); canDrop = false;
   setTimeout(() => canDrop = true, 550);
   updateUI();
 }
 
-const G = 0.32, SUB = 6;
 function step() {
+  if (mode === "hard") hardStep(); else simpleStep();
+  commonStep();
+}
+const topOf = b => b.mb ? b.mb.bounds.min.y : b.y - b.r;
+function voiceNewborns(newborns) {
+  if (!newborns.length) return;
+  if (isWaiwai()) newborns.forEach(nb => playVoice(nb.lv, { body: nb }));
+  else { const top = newborns.reduce((m, nb) => nb.lv > m.lv ? nb : m); playVoice(top.lv, { body: top }); }
+}
+const G = 0.32, SUB = 6;
+function simpleStep() {
   const merges = [], newborns = [];
   for (let s = 0; s < SUB; s++) {
     for (const b of bodies) {
@@ -393,11 +459,10 @@ function step() {
   }
   if (merges.length) {
     bodies = bodies.filter(b => !b.dead); updateUI();
-    if (newborns.length) {
-      if (isWaiwai()) newborns.forEach(nb => playVoice(nb.lv, { body: nb }));
-      else { const top = newborns.reduce((m, nb) => nb.lv > m.lv ? nb : m); playVoice(top.lv, { body: top }); }
-    }
+    voiceNewborns(newborns);
   }
+}
+function commonStep() {
   // ②わいわいモード：画面にいる全員が、自分のボイスが鳴り終わったら間をあけずに次を流す
   if (isWaiwai()) {
     const t = performance.now();
@@ -409,7 +474,7 @@ function step() {
   }
   // ゲームオーバー判定：落下済みの人物がラインより上に一定時間とどまる
   const now = performance.now();
-  const danger = bodies.some(b => now - b.born > 1200 && b.y - b.r < LINE && Math.abs(b.vy) < 1.5);
+  const danger = bodies.some(b => now - b.born > 1200 && topOf(b) < LINE && Math.abs(b.vy) < 1.5);
   overTimer = danger ? overTimer + 1 : 0;
   if (overTimer > 90 && !over) {
     over = true;
@@ -421,17 +486,26 @@ function step() {
 function render() {
   ctx.clearRect(0, 0, W, H);
   // デンジャーライン
-  const warn = bodies.some(b => b.y - b.r < LINE + 40 && performance.now() - b.born > 1200);
+  const warn = bodies.some(b => topOf(b) < LINE + 40 && performance.now() - b.born > 1200);
   ctx.setLineDash([8, 6]); ctx.strokeStyle = warn ? "#e5533c" : "rgba(226,183,122,.8)"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, LINE); ctx.lineTo(W, LINE); ctx.stroke(); ctx.setLineDash([]);
   // 照準
   if (!over) {
-    const r = PEOPLE[cur].r, x = Math.max(r, Math.min(W - r, aimX));
-    ctx.strokeStyle = "rgba(90,59,28,.15)"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(x, TOP); ctx.lineTo(x, H); ctx.stroke();
-    if (canDrop) { ctx.globalAlpha = 1; drawPerson(ctx, x, TOP, r, cur); }
+    if (mode === "hard") {
+      const a = aimPos(), sh = getShape(cur);
+      ctx.strokeStyle = "rgba(90,59,28,.15)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, H); ctx.stroke();
+      if (canDrop) { ctx.drawImage(sh.img, a.x - sh.w / 2, a.y - sh.h / 2, sh.w, sh.h); if (showHit()) drawHitLocal(sh, a.x, a.y, 0, 0, 0); }
+    } else {
+      const r = PEOPLE[cur].r, x = Math.max(r, Math.min(W - r, aimX));
+      ctx.strokeStyle = "rgba(90,59,28,.15)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, TOP); ctx.lineTo(x, H); ctx.stroke();
+      if (canDrop) { ctx.globalAlpha = 1; drawPerson(ctx, x, TOP, r, cur); }
+    }
   }
-  for (const b of bodies) drawPerson(ctx, b.x, b.y, b.r, b.lv);
+  for (const b of bodies) {
+    if (b.mb) drawHardBody(b); else drawPerson(ctx, b.x, b.y, b.r, b.lv);
+  }
   // 吹き出し（しゃべっている人物）
   const tnow = performance.now();
   ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -454,7 +528,195 @@ function render() {
   effects = effects.filter(e => e.t < 20);
 }
 
-function loop() { if (!over) step(); render(); requestAnimationFrame(loop); }
+let paused = false;
+function loop() { if (!over && !paused) step(); render(); requestAnimationFrame(loop); }
+
+// ===== ハードモード：写真（画像）の形どおりの当たり判定 =====
+// 画像の透明でない部分をマス目に分け、その形を小さな円の集まりで埋めて1つの剛体にする（Matter.js）
+const shapes = new Array(PEOPLE.length).fill(null);
+let engine = null, walls = [], hardMerges = [];
+if (window.Matter) {
+  engine = Matter.Engine.create({ gravity: { x: 0, y: 1 } });
+  engine.positionIterations = 10; engine.velocityIterations = 8;
+  const wo = { isStatic: true, friction: 0.5, restitution: 0 };
+  walls = [
+    Matter.Bodies.rectangle(W / 2, H + 50, W + 400, 100, wo),
+    Matter.Bodies.rectangle(-50, H / 2 - 400, 100, H + 1200, wo),
+    Matter.Bodies.rectangle(W + 50, H / 2 - 400, 100, H + 1200, wo),
+  ];
+  const onPairs = e => {
+    for (const pr of e.pairs) {
+      const A = pr.bodyA.parent.plugin.w, B = pr.bodyB.parent.plugin.w;
+      if (A && B && A !== B && A.lv === B.lv && !A.dead && !B.dead) { A.dead = B.dead = true; hardMerges.push([A, B]); }
+    }
+  };
+  Matter.Events.on(engine, "collisionStart", onPairs);
+  Matter.Events.on(engine, "collisionActive", onPairs);
+}
+
+// 写真がない人物用の全身イラスト（ポーズ違い）
+const POSES = [
+  { arms: [[150, 150], [150, 150]], legs: [25, 25], head: 0.2 },   // 三男：ばんざい
+  { arms: [[160, 165], [55, 40]],   legs: [30, 10] },              // 次男：かた手をあげて走る
+  { arms: [[90, 90], [90, 90]],     legs: [8, 8] },                // 長男：Tポーズ
+  { arms: [[45, -40], [45, -40]],   legs: [6, 6], skirt: true },   // お母さん：こしに手
+  { arms: [[135, 135], [135, 135]], legs: [28, 28] },              // お父さん：Yの字ジャンプ
+];
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16), f = c => Math.max(0, Math.min(255, Math.round(c * k)));
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+function drawFigure(c, S, lv) {
+  const p = PEOPLE[lv];
+  if (p.style === "poop") { drawPoop(c, S / 2, S * 0.52, S * 0.6, p); return; }
+  const ps = POSES[lv], cx = S / 2, shirt = shade(p.bg, 0.85), pants = "#4a5d7e";
+  const sy = S * 0.45, hipY = S * 0.67, aw = S * 0.08, lw = S * 0.09, seg = S * 0.14, leg = S * 0.25;
+  const dir = (side, deg) => [side * Math.sin(deg * Math.PI / 180), Math.cos(deg * Math.PI / 180)];
+  c.lineCap = "round"; c.lineJoin = "round";
+  // 脚
+  [-1, 1].forEach((side, i) => {
+    const hx = cx + side * S * 0.06, [dx, dy] = dir(side, ps.legs[i]);
+    c.strokeStyle = pants; c.lineWidth = lw;
+    c.beginPath(); c.moveTo(hx, hipY - S * 0.02); c.lineTo(hx + dx * leg, hipY + dy * leg); c.stroke();
+    c.fillStyle = "#3a2a1e"; c.beginPath(); c.ellipse(hx + dx * leg, hipY + dy * leg + S * 0.01, lw * 0.7, lw * 0.45, 0, 0, Math.PI * 2); c.fill();
+  });
+  // 腕
+  [-1, 1].forEach((side, i) => {
+    const shx = cx + side * S * 0.1, [ux, uy] = dir(side, ps.arms[i][0]), [fx, fy] = dir(side, ps.arms[i][1]);
+    const ex = shx + ux * seg, ey = sy + uy * seg, hx = ex + fx * seg, hy = ey + fy * seg;
+    c.strokeStyle = shirt; c.lineWidth = aw;
+    c.beginPath(); c.moveTo(shx, sy); c.lineTo(ex, ey); c.lineTo(hx, hy); c.stroke();
+    c.fillStyle = p.skin; c.beginPath(); c.arc(hx, hy, aw * 0.6, 0, Math.PI * 2); c.fill();
+  });
+  // 胴体
+  c.fillStyle = shirt;
+  if (ps.skirt) {
+    c.beginPath(); c.moveTo(cx - S * 0.11, sy - S * 0.03); c.lineTo(cx + S * 0.11, sy - S * 0.03);
+    c.lineTo(cx + S * 0.17, hipY + S * 0.08); c.lineTo(cx - S * 0.17, hipY + S * 0.08); c.closePath(); c.fill();
+  } else {
+    c.beginPath(); c.roundRect(cx - S * 0.12, sy - S * 0.04, S * 0.24, hipY - sy + S * 0.04, S * 0.05); c.fill();
+  }
+  // 頭（顔イラストを流用）
+  const hr = S * (ps.head || 0.17);
+  drawPerson(c, cx, S * 0.43 - hr * 0.95, hr / 0.72, lv, { noBg: true, noPhoto: true });
+}
+
+function getShape(lv) {
+  if (!shapes[lv]) shapes[lv] = buildShape(lv);
+  return shapes[lv];
+}
+function buildShape(lv) {
+  const src = document.createElement("canvas"); let w, h;
+  const im = photos[lv];
+  if (im) {
+    const k = 256 / Math.max(im.width, im.height);
+    w = Math.max(8, Math.round(im.width * k)); h = Math.max(8, Math.round(im.height * k));
+    src.width = w; src.height = h; src.getContext("2d").drawImage(im, 0, 0, w, h);
+  } else {
+    w = h = 256; src.width = src.height = 256; drawFigure(src.getContext("2d"), 256, lv);
+  }
+  const data = src.getContext("2d").getImageData(0, 0, w, h).data;
+  const cell = Math.max(w, h) / 26, gw = Math.ceil(w / cell), gh = Math.ceil(h / cell);
+  const cnt = new Float32Array(gw * gh), tot = new Float32Array(gw * gh);
+  let solidPx = 0, minX = w, maxX = 0, minY = h, maxY = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const gi = Math.floor(y / cell) * gw + Math.floor(x / cell); tot[gi]++;
+    if (data[(y * w + x) * 4 + 3] > 128) {
+      cnt[gi]++; solidPx++;
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const solid = new Uint8Array(gw * gh);
+  for (let i = 0; i < solid.length; i++) solid[i] = tot[i] && cnt[i] / tot[i] > 0.45 ? 1 : 0;
+  if (!solid.some(v => v)) { solid.fill(1); solidPx = w * h; minX = 0; maxX = w; minY = 0; maxY = h; }
+  // 形の内側への距離（マス数）
+  const INF = 1e9, d = new Float32Array(gw * gh);
+  for (let i = 0; i < d.length; i++) d[i] = solid[i] ? INF : 0;
+  const at = (x, y) => (x < 0 || y < 0 || x >= gw || y >= gh) ? 0 : d[y * gw + x];
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) { const i = y * gw + x; if (d[i]) d[i] = Math.min(d[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1, at(x + 1, y - 1) + 1); }
+  for (let y = gh - 1; y >= 0; y--) for (let x = gw - 1; x >= 0; x--) { const i = y * gw + x; if (d[i]) d[i] = Math.min(d[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1, at(x - 1, y + 1) + 1); }
+  // 大きい円から順に形を埋める
+  const covered = new Uint8Array(gw * gh), circles = [];
+  while (circles.length < 48) {
+    let best = -1, bd = 0;
+    for (let i = 0; i < d.length; i++) if (solid[i] && !covered[i] && d[i] > bd) { bd = d[i]; best = i; }
+    if (best < 0) break;
+    const bx = (best % gw + 0.5) * cell, by = (Math.floor(best / gw) + 0.5) * cell, r = Math.max(0.6, bd - 0.35) * cell;
+    circles.push({ x: bx, y: by, r });
+    for (let i = 0; i < d.length; i++) {
+      if (!solid[i] || covered[i]) continue;
+      const cx2 = (i % gw + 0.5) * cell, cy2 = (Math.floor(i / gw) + 0.5) * cell;
+      if (Math.hypot(cx2 - bx, cy2 - by) <= r + cell * 0.35) covered[i] = 1;
+    }
+  }
+  // 大きさ：形の面積が、シンプルモードの円と同じくらいになるようにそろえる
+  const R = PEOPLE[lv].r;
+  let k = Math.sqrt(Math.PI * R * R * 0.8 / solidPx);
+  k = Math.min(k, 370 / Math.max(maxX - minX, maxY - minY, 1));
+  return {
+    img: src, w: w * k, h: h * k,
+    circles: circles.map(c => ({ x: (c.x - w / 2) * k, y: (c.y - h / 2) * k, r: c.r * k })),
+    left: (minX - w / 2) * k, right: (maxX - w / 2) * k, top: (minY - h / 2) * k, bottom: (maxY - h / 2) * k,
+  };
+}
+function drawThumb(c, cx, cy, r, lv) {
+  if (mode !== "hard") { drawPerson(c, cx, cy, r, lv); return; }
+  const sh = getShape(lv), bw = sh.right - sh.left, bh = sh.bottom - sh.top, k = (2 * r) / Math.max(bw, bh);
+  const ox = (sh.left + sh.right) / 2, oy = (sh.top + sh.bottom) / 2;
+  c.drawImage(sh.img, cx - (ox + sh.w / 2) * k, cy - (oy + sh.h / 2) * k, sh.w * k, sh.h * k);
+}
+function aimPos() {
+  const sh = getShape(cur);
+  const x = Math.max(-sh.left + 2, Math.min(W - sh.right - 2, aimX));
+  const y = Math.max(TOP - 20, -sh.top + 6);
+  return { x, y };
+}
+function hardSpawn(lv, x, y, vel) {
+  const sh = getShape(lv);
+  const parts = sh.circles.map(c => Matter.Bodies.circle(x + c.x, y + c.y, c.r));
+  const mb = Matter.Body.create({ parts, friction: 0.35, frictionStatic: 0.7, restitution: 0.05, frictionAir: 0.012 });
+  const b = { id: nid++, x: mb.position.x, y: mb.position.y, vy: 0, r: y - (y + sh.top), lv, born: performance.now(),
+              mb, sh, off: { x: x - mb.position.x, y: y - mb.position.y } };
+  mb.plugin.w = b;
+  Matter.Composite.add(engine.world, mb);
+  if (vel) Matter.Body.setVelocity(mb, vel);
+  bodies.push(b);
+  return b;
+}
+function hardStep() {
+  hardMerges = [];
+  Matter.Engine.update(engine, 1000 / 60);
+  const newborns = [];
+  for (const [a, b] of hardMerges) {
+    const lv = a.lv, pa = a.mb.position, pb = b.mb.position;
+    const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+    score += (lv + 1) * (lv + 2) / 2;
+    effects.push({ x: mx, y: my, r: PEOPLE[lv].r * 1.3, t: 0 });
+    Matter.Composite.remove(engine.world, a.mb); Matter.Composite.remove(engine.world, b.mb);
+    if (lv + 1 < PEOPLE.length) {
+      const v = { x: (a.mb.velocity.x + b.mb.velocity.x) / 2, y: Math.min(0, (a.mb.velocity.y + b.mb.velocity.y) / 2) };
+      const nb = hardSpawn(lv + 1, mx, my, v); nb.born = performance.now() - 2000; newborns.push(nb);
+    }
+  }
+  if (hardMerges.length) { bodies = bodies.filter(b => !b.dead); updateUI(); voiceNewborns(newborns); }
+  for (const b of bodies) {
+    const mb = b.mb; b.x = mb.position.x; b.y = mb.position.y; b.vy = mb.velocity.y; b.r = mb.position.y - mb.bounds.min.y;
+  }
+}
+const showHit = () => document.getElementById("showHit").checked;
+function drawHitLocal(sh, px, py, ang, ox, oy) {
+  ctx.save(); ctx.translate(px, py); ctx.rotate(ang);
+  ctx.strokeStyle = "rgba(229,83,60,.8)"; ctx.lineWidth = 1.2;
+  for (const c of sh.circles) { ctx.beginPath(); ctx.arc(c.x + ox, c.y + oy, c.r, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+}
+function drawHardBody(b) {
+  const mb = b.mb, sh = b.sh;
+  ctx.save(); ctx.translate(mb.position.x, mb.position.y); ctx.rotate(mb.angle);
+  ctx.drawImage(sh.img, b.off.x - sh.w / 2, b.off.y - sh.h / 2, sh.w, sh.h);
+  ctx.restore();
+  if (showHit()) drawHitLocal(sh, mb.position.x, mb.position.y, mb.angle, b.off.x, b.off.y);
+}
 
 // ===== 入力 =====
 function toX(e) { const rc = cv.getBoundingClientRect(); return (e.clientX - rc.left) / rc.width * W; }
@@ -472,7 +734,7 @@ function buildChain() {
   chain.innerHTML = "";
   PEOPLE.forEach((p, i) => {
     const d = document.createElement("div"), c = document.createElement("canvas");
-    c.width = 88; c.height = 88; drawPerson(c.getContext("2d"), 44, 44, 40, i);
+    c.width = 88; c.height = 88; drawThumb(c.getContext("2d"), 44, 44, 40, i);
     d.appendChild(c); d.appendChild(document.createTextNode(p.name));
     const m = document.createElement("span"); m.className = "vmark"; m.textContent = voiceBufs[i] ? "♪ 録音ボイス" : "";
     d.appendChild(m);
@@ -484,7 +746,7 @@ function buildChain() {
 function openEditor() {
   const p = PEOPLE[target];
   $("editor").hidden = false; $("edName").textContent = p.name; $("edLine").value = p.line;
-  const c = $("edCv").getContext("2d"); c.clearRect(0, 0, 80, 80); drawPerson(c, 40, 40, 36, target);
+  const c = $("edCv").getContext("2d"); c.clearRect(0, 0, 80, 80); drawThumb(c, 40, 40, 36, target);
   $("bClearVoice").hidden = !voiceBufs[target];
 }
 $("edLine").oninput = e => { PEOPLE[target].line = e.target.value; };
@@ -495,7 +757,7 @@ $("bClearVoice").onclick = () => { voiceBufs[target] = null; openEditor(); build
 fileIn.onchange = () => {
   const f = fileIn.files[0]; if (!f) return;
   const img = new Image();
-  img.onload = () => { photos[target] = img; buildChain(); openEditor(); updateUI(); };
+  img.onload = () => { photos[target] = img; shapes[target] = null; buildChain(); openEditor(); updateUI(); };
   img.src = URL.createObjectURL(f); fileIn.value = "";
 };
 vIn.onchange = async () => {
@@ -520,7 +782,56 @@ async function loadBundledVoices() {
   buildChain(); if (target >= 0) openEditor();
 }
 
+// ===== タイトル画面 =====
+const titleEl = $("title"), tcv = $("titleCv"), tctx = tcv.getContext("2d");
+function showTitle() {
+  started = false; stopVoice(); reset();
+  showTitleBest(); $("titleWaiwai").checked = $("waiwai").checked;
+  titleEl.classList.remove("hide");
+}
+function showTitleBest() { $("titleBestS").textContent = bestBy.simple; $("titleBestH").textContent = bestBy.hard; }
+function startGame(m) {
+  ensureAudio();
+  mode = m;
+  $("modeTag").textContent = m === "hard" ? "ハード" : "シンプル";
+  $("modeTag").className = "modeTag" + (m === "hard" ? " hard" : "");
+  $("hitWrap").hidden = m !== "hard";
+  buildChain(); if (target >= 0) openEditor();
+  $("waiwai").checked = $("titleWaiwai").checked;
+  reset(); started = true; titleEl.classList.add("hide");
+  playVoice(0, {}); // 三男の声でスタート
+}
+$("startSimple").onclick = () => startGame("simple");
+$("startHard").onclick = () => { if (engine) startGame("hard"); };
+$("toTitle").onclick = showTitle;
+// ゲーム中にタイトルへもどる（確認つき・確認中は一時停止）
+$("backBtn").onclick = () => {
+  if (over || bodies.length === 0) { showTitle(); return; }
+  paused = true; stopVoice(); $("confirm").classList.add("show");
+};
+$("cfYes").onclick = () => { $("confirm").classList.remove("show"); paused = false; showTitle(); };
+$("cfNo").onclick = () => { $("confirm").classList.remove("show"); paused = false; };
+$("waiwai").onchange = () => { $("titleWaiwai").checked = $("waiwai").checked; };
+// タイトルのイラスト：進化順に輪になって並び、中央でうんこがはねる
+function drawTitle(t) {
+  if (titleEl.classList.contains("hide")) return;
+  const S = 760, c = S / 2; tctx.clearRect(0, 0, S, S);
+  const ring = 270, n = 5;
+  tctx.strokeStyle = "rgba(240,138,60,.35)"; tctx.lineWidth = 6; tctx.setLineDash([14, 14]);
+  tctx.beginPath(); tctx.arc(c, c, ring, 0, Math.PI * 2); tctx.stroke(); tctx.setLineDash([]);
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + i * Math.PI * 2 / n + t / 6000;
+    const bob = Math.sin(t / 300 + i) * 8;
+    drawPerson(tctx, c + Math.cos(a) * ring, c + Math.sin(a) * ring + bob, 46 + i * 9, i);
+  }
+  const sq = 1 + Math.sin(t / 220) * 0.04;
+  tctx.save(); tctx.translate(c, c + 20); tctx.scale(1 / sq, sq);
+  drawPerson(tctx, 0, 0, 150, PEOPLE.length - 1); tctx.restore();
+}
+(function titleLoop(t) { drawTitle(t || 0); requestAnimationFrame(titleLoop); })();
+
 buildChain(); reset(); loop(); loadBundledVoices();
+showTitleBest();
 </script>
 <script>
 // オフラインでも遊べるようにファイルを端末に保存する
