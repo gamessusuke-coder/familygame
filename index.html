@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>かぞくゲーム</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#fdf3e1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="かぞくゲーム">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", sans-serif;
+         background: #fdf3e1; color: #5a3b1c; display: flex; justify-content: center; user-select: none; }
+  html, body { overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  /* 画面の高さに収まるように幅を決める（iPhoneのホーム画面起動でもスクロールせずに遊べる） */
+  .wrap { width: 100%; max-width: min(460px, calc((100dvh - 110px) * 400 / 580 + 36px)); padding: 12px;
+          padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom));
+          padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .05em; }
+  .stats { display: flex; gap: 8px; }
+  .box { background: #fff; border-radius: 12px; padding: 4px 10px; text-align: center; box-shadow: 0 2px 0 #e6cfa8; min-width: 64px; }
+  .box small { display: block; font-size: 10px; color: #a07a4f; }
+  .box b { font-size: 18px; }
+  #nextCv { display: block; margin: 0 auto; }
+  .stage { position: relative; }
+  canvas#game { display: block; width: 100%; border-radius: 0 0 18px 18px; background: #fff7e6;
+                border: 6px solid #e2b77a; border-top: none; touch-action: none; cursor: pointer; }
+  .over { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+          background: rgba(90,59,28,.55); color: #fff; border-radius: 0 0 18px 18px; }
+  .over.show { display: flex; }
+  .over h2 { margin: 0 0 6px; font-size: 28px; }
+  button { font: inherit; border: none; background: #f08a3c; color: #fff; padding: 8px 18px; border-radius: 999px;
+           font-weight: bold; cursor: pointer; box-shadow: 0 3px 0 #c66a26; }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 #c66a26; }
+  .legend { margin-top: 10px; background: #fff; border-radius: 14px; padding: 10px; box-shadow: 0 2px 0 #e6cfa8; }
+  .legend p { margin: 0 0 6px; font-size: 12px; color: #a07a4f; }
+  .chain { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .chain div { text-align: center; font-size: 10px; white-space: nowrap; overflow: hidden; cursor: pointer; border-radius: 8px; padding: 2px 0; }
+  .chain div:hover { background: #fdf3e1; }
+  .chain canvas { width: 44px; height: 44px; display: block; margin: 0 auto; }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 8px; }
+  .row span { font-size: 11px; color: #a07a4f; }
+  .editor { margin-top: 10px; border-top: 1px dashed #e6cfa8; padding-top: 10px; }
+  .ed-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .ed-head canvas { width: 40px; height: 40px; }
+  .editor label { display: block; font-size: 11px; color: #a07a4f; margin-bottom: 6px; }
+  .editor input[type=text] { width: 100%; font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid #e6cfa8; border-radius: 8px; color: #5a3b1c; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btns button, .small { font-size: 12px; padding: 6px 12px; }
+  .ghost { background: #fff; color: #a0602a; box-shadow: 0 2px 0 #e6cfa8; border: 1px solid #e6cfa8; }
+  .chain div.sel { background: #fde4c4; }
+  .vmark { display: block; font-size: 9px; color: #f08a3c; height: 11px; }
+  select { font: inherit; font-size: 12px; border: 1px solid #e6cfa8; border-radius: 8px; padding: 4px; color: #5a3b1c; background: #fff; }
+  .chk { font-size: 12px; cursor: pointer; }
+  .chk span { font-size: 10px; color: #a07a4f; }
+  .chk input { accent-color: #f08a3c; transform: scale(1.2); margin-right: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>かぞくゲーム</h1>
+    <div class="stats">
+      <div class="box"><small>スコア</small><b id="score">0</b></div>
+      <div class="box"><small>ベスト</small><b id="best">0</b></div>
+      <div class="box"><small>ネクスト</small><canvas id="nextCv" width="40" height="40" style="width:40px;height:40px"></canvas></div>
+    </div>
+  </header>
+  <div class="stage">
+    <canvas id="game"></canvas>
+    <div class="over" id="over">
+      <h2>ゲームオーバー</h2>
+      <p id="finalScore"></p>
+      <button id="retry">もういちど</button>
+    </div>
+  </div>
+  <div class="legend">
+    <p>しんかの順番（同じ人がくっつくと次の人に！最後はうんこ）／ アイコンをタップすると顔写真・ボイスを設定できます</p>
+    <div class="chain" id="chain"></div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <input type="file" id="vfile" accept="audio/*" hidden>
+    <div class="editor" id="editor" hidden>
+      <div class="ed-head"><canvas id="edCv" width="80" height="80"></canvas><b id="edName"></b></div>
+      <label>セリフ（声のファイルがない時は、この文を合成音声で読み上げます）<input type="text" id="edLine"></label>
+      <div class="btns">
+        <button class="small" id="bPlay">▶ 試聴</button>
+        <button class="small ghost" id="bVoice">声のファイルを選ぶ</button>
+        <button class="small ghost" id="bClearVoice" hidden>合成音声に戻す</button>
+        <button class="small ghost" id="bPhoto">顔写真を選ぶ</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="waiwai"> <b>わいわいモード</b><br><span>画面にいる全員がずっとしゃべり続けます</span></label>
+      <div style="display:flex;gap:8px;align-items:center"><label class="chk"><input type="checkbox" id="mute"> 消音</label><button id="reset" class="small">リセット</button></div>
+    </div>
+    <div class="row"><span>クリック / タップで落とす・ドラッグで位置合わせ</span></div>
+  </div>
+</div>
+
+<script>
+// ===== 人物定義（スイカゲームの11段階に対応） =====
+const PEOPLE = [
+  { name: "三男",     line: "バーブー",   pitch: 1.9, rate: 1.2, r: 22,  bg: "#ffd6e0", skin: "#ffdcc2", hair: "#5a3b1c", style: "toddler", voice: "voices/sannan.mp3" },
+  { name: "次男",     line: "ぶいぶいちん",   pitch: 1.6, rate: 1.2, r: 32,  bg: "#b8e0ff", skin: "#ffd9bd", hair: "#3b2614", style: "boy", voice: "voices/jinan.mp3" },
+  { name: "長男",     line: "おとうしゃま",   pitch: 1.2, rate: 1.1, r: 45,  bg: "#9ad3a5", skin: "#f7cfae", hair: "#2a1a0d", style: "teenboy", voice: "voices/chonan.mp3" },
+  { name: "お母さん", line: "知らんけど",     pitch: 1.3, rate: 1.0, r: 62,  bg: "#ffa69e", skin: "#f8d0ae", hair: "#3a2210", style: "mom", voice: "voices/okasan.mp3" },
+  { name: "お父さん", line: "あいざいます！", pitch: 0.8, rate: 1.0, r: 84,  bg: "#8fb8ff", skin: "#efc39d", hair: "#1f140a", style: "dad", voice: "voices/otosan.mp3" },
+  { name: "うんこ",   line: "ぶりっ！",     pitch: 0.6, rate: 0.9, r: 110, bg: "#ffe9a8", skin: "#9a6233", hair: "#7a4a22", style: "poop" },
+];
+const photos = new Array(PEOPLE.length).fill(null);
+
+// ===== 人物の描画 =====
+function drawPerson(ctx, x, y, r, lv) {
+  const p = PEOPLE[lv];
+  ctx.save();
+  // 外枠
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = p.bg; ctx.fill();
+  ctx.lineWidth = Math.max(1, r * 0.05); ctx.strokeStyle = "rgba(90,59,28,.35)"; ctx.stroke();
+
+  if (photos[lv]) {
+    const img = photos[lv], ir = r * 0.88;
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, ir, 0, Math.PI * 2); ctx.clip();
+    const s = Math.max(ir * 2 / img.width, ir * 2 / img.height);
+    ctx.drawImage(img, x - img.width * s / 2, y - img.height * s / 2, img.width * s, img.height * s);
+    ctx.restore(); ctx.restore(); return;
+  }
+
+  if (p.style === "poop") { drawPoop(ctx, x, y, r, p); ctx.restore(); return; }
+  const fr = r * 0.72, fy = y + r * 0.06, st = p.style;
+  // 後ろ髪（ロング系）
+  if (st === "teengirl" || st === "mom") {
+    ctx.fillStyle = p.hair; ctx.beginPath();
+    ctx.ellipse(x, fy + fr * 0.15, fr * 1.12, fr * 1.08, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // おだんご・ツインテール（顔の後ろ）
+  ctx.fillStyle = p.hair;
+  if (st === "girl") { circ(ctx, x - fr * 0.95, fy - fr * 0.45, fr * 0.32); circ(ctx, x + fr * 0.95, fy - fr * 0.45, fr * 0.32); }
+  if (st === "mom" || st === "grandma") circ(ctx, x, fy - fr * 1.02, fr * 0.33);
+  // 顔
+  ctx.fillStyle = p.skin; circ(ctx, x, fy, fr);
+  // 耳
+  circ(ctx, x - fr * 0.97, fy + fr * 0.05, fr * 0.16); circ(ctx, x + fr * 0.97, fy + fr * 0.05, fr * 0.16);
+
+  // 前髪（顔円でクリップ）
+  ctx.save(); ctx.beginPath(); ctx.arc(x, fy, fr * 1.01, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = p.hair;
+  if (st === "toddler") ctx.fillRect(x - fr, fy - fr, fr * 2, fr * 0.55);
+  if (st === "boy" || st === "dad") { ctx.fillRect(x - fr, fy - fr, fr * 2, fr * 0.62); }
+  if (st === "girl" || st === "teengirl" || st === "mom") {
+    ctx.beginPath(); ctx.moveTo(x - fr, fy - fr * 0.1);
+    ctx.quadraticCurveTo(x - fr * 0.5, fy - fr * 0.55, x, fy - fr * 0.42);
+    ctx.quadraticCurveTo(x + fr * 0.5, fy - fr * 0.55, x + fr, fy - fr * 0.1);
+    ctx.lineTo(x + fr, fy - fr); ctx.lineTo(x - fr, fy - fr); ctx.fill();
+  }
+  if (st === "teenboy") {
+    ctx.fillRect(x - fr, fy - fr, fr * 2, fr * 0.5);
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) { const px = x - fr + i * fr / 3; ctx.lineTo(px, fy - fr * 0.5 + (i % 2 ? fr * 0.22 : 0)); }
+    ctx.lineTo(x + fr, fy - fr); ctx.lineTo(x - fr, fy - fr); ctx.fill();
+  }
+  if (st === "grandma") { ctx.fillRect(x - fr, fy - fr, fr * 2, fr * 0.5); }
+  if (st === "grandpa" || st === "great") {
+    ctx.fillRect(x - fr, fy - fr * 0.45, fr * 0.28, fr * 0.6); ctx.fillRect(x + fr * 0.72, fy - fr * 0.45, fr * 0.28, fr * 0.6);
+  }
+  ctx.restore();
+  // スパイク（おにいちゃん）頭頂の飛び出し
+  if (st === "teenboy") {
+    ctx.fillStyle = p.hair; ctx.beginPath();
+    ctx.moveTo(x - fr * 0.5, fy - fr * 0.86); ctx.lineTo(x - fr * 0.25, fy - fr * 1.25); ctx.lineTo(x, fy - fr * 0.95);
+    ctx.lineTo(x + fr * 0.3, fy - fr * 1.22); ctx.lineTo(x + fr * 0.5, fy - fr * 0.86); ctx.fill();
+  }
+  // あかちゃんのくるん毛
+  if (st === "baby") {
+    ctx.strokeStyle = p.hair; ctx.lineWidth = Math.max(1, fr * 0.12); ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(x + fr * 0.1, fy - fr * 0.95, fr * 0.22, Math.PI * 0.9, Math.PI * 2.4); ctx.stroke();
+  }
+
+  // 目
+  const ey = fy + fr * 0.02, ex = fr * 0.36;
+  ctx.fillStyle = "#3a2210"; ctx.strokeStyle = "#3a2210"; ctx.lineCap = "round";
+  if (st === "grandma" || st === "grandpa" || st === "great") {
+    ctx.lineWidth = Math.max(1, fr * 0.07);
+    [-1, 1].forEach(s => { ctx.beginPath(); ctx.arc(x + s * ex, ey + fr * 0.05, fr * 0.13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); });
+  } else {
+    const er = st === "baby" || st === "toddler" ? fr * 0.11 : fr * 0.085;
+    [-1, 1].forEach(s => { circ(ctx, x + s * ex, ey, er); ctx.fillStyle = "#fff"; circ(ctx, x + s * ex + er * 0.35, ey - er * 0.35, er * 0.35); ctx.fillStyle = "#3a2210"; });
+  }
+  // メガネ
+  if (st === "grandpa" || st === "grandma" || st === "dad") {
+    ctx.strokeStyle = st === "dad" ? "#222" : "#8a6a3a"; ctx.lineWidth = Math.max(1, fr * 0.05);
+    [-1, 1].forEach(s => { ctx.beginPath(); ctx.arc(x + s * ex, ey, fr * 0.22, 0, Math.PI * 2); ctx.stroke(); });
+    ctx.beginPath(); ctx.moveTo(x - ex + fr * 0.22, ey); ctx.lineTo(x + ex - fr * 0.22, ey); ctx.stroke();
+  }
+  // ほっぺ
+  ctx.fillStyle = "rgba(255,120,120,.35)";
+  [-1, 1].forEach(s => { ctx.beginPath(); ctx.ellipse(x + s * fr * 0.55, fy + fr * 0.3, fr * 0.16, fr * 0.1, 0, 0, Math.PI * 2); ctx.fill(); });
+  // ひげ
+  if (st === "great") {
+    ctx.fillStyle = p.hair; ctx.beginPath(); ctx.ellipse(x, fy + fr * 0.62, fr * 0.5, fr * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.08)"; ctx.lineWidth = 1; ctx.stroke();
+  }
+  if (st === "dad" || st === "grandpa") {
+    ctx.fillStyle = st === "dad" ? p.hair : p.hair;
+    ctx.beginPath(); ctx.ellipse(x - fr * 0.14, fy + fr * 0.36, fr * 0.16, fr * 0.07, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + fr * 0.14, fy + fr * 0.36, fr * 0.16, fr * 0.07, -0.2, 0, Math.PI * 2); ctx.fill();
+  }
+  // 口
+  ctx.strokeStyle = "#a0392c"; ctx.lineWidth = Math.max(1, fr * 0.06);
+  if (st === "baby") { ctx.fillStyle = "#e4776b"; circ(ctx, x, fy + fr * 0.42, fr * 0.09); }
+  else if (st !== "great") { ctx.beginPath(); ctx.arc(x, fy + fr * 0.36, fr * 0.2, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke(); }
+  ctx.restore();
+}
+function drawPoop(ctx, x, y, r, p) {
+  const u = r * 0.8, base = y + u * 0.7;
+  const tiers = [[0, 0.95, 0.3], [-0.3, 0.75, 0.27], [-0.58, 0.52, 0.23]];
+  ctx.fillStyle = p.skin; ctx.strokeStyle = p.hair; ctx.lineWidth = Math.max(1, u * 0.04);
+  tiers.forEach(([dy, w, h]) => {
+    ctx.beginPath(); ctx.ellipse(x, base + dy * u - h * u * 0.5, w * u, h * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  });
+  // 先っぽ
+  ctx.beginPath(); ctx.moveTo(x - u * 0.3, y - u * 0.18);
+  ctx.quadraticCurveTo(x - u * 0.05, y - u * 0.75, x + u * 0.22, y - u * 0.8);
+  ctx.quadraticCurveTo(x + u * 0.05, y - u * 0.45, x + u * 0.3, y - u * 0.18); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // ハイライト
+  ctx.fillStyle = "rgba(255,255,255,.25)";
+  ctx.beginPath(); ctx.ellipse(x - u * 0.45, base - u * 0.2, u * 0.18, u * 0.07, -0.3, 0, Math.PI * 2); ctx.fill();
+  // 顔
+  const fy = base - u * 0.42;
+  ctx.fillStyle = "#fff"; circ(ctx, x - u * 0.28, fy, u * 0.13); circ(ctx, x + u * 0.28, fy, u * 0.13);
+  ctx.fillStyle = "#2a1a0d"; circ(ctx, x - u * 0.26, fy + u * 0.02, u * 0.07); circ(ctx, x + u * 0.30, fy + u * 0.02, u * 0.07);
+  ctx.fillStyle = "rgba(255,120,120,.45)";
+  [-1, 1].forEach(s => { ctx.beginPath(); ctx.ellipse(x + s * u * 0.55, fy + u * 0.2, u * 0.12, u * 0.07, 0, 0, Math.PI * 2); ctx.fill(); });
+  ctx.strokeStyle = "#2a1a0d"; ctx.lineWidth = Math.max(1, u * 0.05); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(x, fy + u * 0.12, u * 0.16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+}
+function circ(ctx, x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+
+// ===== ボイス =====
+const voiceBufs = new Array(PEOPLE.length).fill(null);
+let actx = null, curSrc = null, jaVoice = null;
+// iPhone：消音スイッチがオンでも声が出るように「再生」扱いにする（iOS 17以降のSafari）
+try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+let unlocked = false;
+function ensureAudio() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state !== "running") actx.resume();
+    if (!unlocked) { // iOSは最初のタップで無音を1回鳴らすと以降の再生が安定する
+      const b = actx.createBuffer(1, 1, 22050), s = actx.createBufferSource();
+      s.buffer = b; s.connect(actx.destination); s.start(0); unlocked = true;
+    }
+  } catch (e) {}
+}
+["touchend", "click"].forEach(ev => document.addEventListener(ev, ensureAudio, { passive: true }));
+function pickJaVoice() {
+  if (!("speechSynthesis" in window)) return;
+  const vs = speechSynthesis.getVoices();
+  jaVoice = vs.find(v => v.lang === "ja-JP") || vs.find(v => v.lang && v.lang.startsWith("ja")) || null;
+}
+if ("speechSynthesis" in window) { pickJaVoice(); speechSynthesis.onvoiceschanged = pickJaVoice; }
+let master = null, activeSrcs = 0;
+const MAX_OVERLAP = 8; // わいわいモードで同時に鳴らす録音ボイスの上限
+const isWaiwai = () => document.getElementById("waiwai").checked;
+const isMuted = () => document.getElementById("mute").checked;
+function stopVoice() {
+  if (curSrc) { try { curSrc.stop(); } catch (e) {} curSrc = null; }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+// opts.force: 試聴（消音でも鳴らす） / opts.ambient: わいわいモードの常時ボイス / opts.body: 吹き出しを出す人物
+function playVoice(lv, opts = {}) {
+  if (!opts.force && isMuted()) return false;
+  const p = PEOPLE[lv], waiwai = isWaiwai() && !opts.force;
+  let played = false;
+  if (voiceBufs[lv] && actx) {
+    if (!waiwai) stopVoice();                       // ①：最新の声だけ
+    else if (activeSrcs >= MAX_OVERLAP) return false; // ②：重ねて鳴らす（上限あり）
+    if (!master) { master = actx.createGain(); master.gain.value = 0.7; master.connect(actx.destination); }
+    const src = actx.createBufferSource(); src.buffer = voiceBufs[lv];
+    src.connect(master); src.start(); activeSrcs++;
+    src.onended = () => { activeSrcs--; };
+    if (!waiwai) curSrc = src;
+    played = true;
+    if (opts.body) {
+      const end = performance.now() + voiceBufs[lv].duration * 1000;
+      opts.body.nextTalk = end; opts.body.talk = Math.max(end, performance.now() + 600);
+    }
+  } else if ("speechSynthesis" in window && p.line) {
+    // 合成音声はブラウザの仕様で同時に1つしか鳴らせないため、常時ボイスは「誰もしゃべっていない時」に順番にしゃべる
+    if (opts.ambient && (speechSynthesis.speaking || speechSynthesis.pending)) return false;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(p.line);
+    u.lang = "ja-JP"; u.pitch = p.pitch; u.rate = p.rate; if (jaVoice) u.voice = jaVoice;
+    if (opts.body) {
+      const body = opts.body;
+      body.nextTalk = performance.now() + 4000; // 終了通知が来ない場合の保険
+      body.talk = performance.now() + 1400;
+      u.onend = u.onerror = () => { body.nextTalk = performance.now(); };
+    }
+    speechSynthesis.speak(u);
+    played = true;
+  }
+  return played;
+}
+
+// ===== ゲーム本体 =====
+const W = 400, H = 580, TOP = 70, LINE = 110, WALL = 0;
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+cv.width = W * DPR; cv.height = H * DPR; cv.style.aspectRatio = W + "/" + H;
+ctx.scale(DPR, DPR);
+
+let bodies, score, best = 0, cur, next, aimX, canDrop, over, nid, effects, overTimer;
+const SPAWN_MAX = 3; // 落ちてくるのは三男・次男・長男からランダム
+const rnd = () => Math.floor(Math.random() * SPAWN_MAX);
+
+function reset() {
+  bodies = []; effects = []; score = 0; nid = 0; over = false; overTimer = 0;
+  cur = rnd(); next = rnd(); aimX = W / 2; canDrop = true;
+  document.getElementById("over").classList.remove("show");
+  updateUI();
+}
+function updateUI() {
+  document.getElementById("score").textContent = score;
+  if (score > best) best = score;
+  document.getElementById("best").textContent = best;
+  const n = document.getElementById("nextCv"), nc = n.getContext("2d");
+  n.width = 80; n.height = 80; nc.clearRect(0, 0, 80, 80);
+  drawPerson(nc, 40, 40, 34, next);
+}
+
+function drop() {
+  if (!canDrop || over) return;
+  const r = PEOPLE[cur].r;
+  const x = Math.max(r, Math.min(W - r, aimX));
+  const nb = { id: nid++, x, y: TOP, vx: 0, vy: 0, r, lv: cur, born: performance.now() };
+  bodies.push(nb);
+  playVoice(cur, { body: nb });
+  cur = next; next = rnd(); canDrop = false;
+  setTimeout(() => canDrop = true, 550);
+  updateUI();
+}
+
+const G = 0.32, SUB = 6;
+function step() {
+  const merges = [], newborns = [];
+  for (let s = 0; s < SUB; s++) {
+    for (const b of bodies) {
+      b.vy += G / SUB; b.x += b.vx / SUB; b.y += b.vy / SUB;
+      if (b.x - b.r < WALL) { b.x = WALL + b.r; b.vx *= -0.2; }
+      if (b.x + b.r > W - WALL) { b.x = W - WALL - b.r; b.vx *= -0.2; }
+      if (b.y + b.r > H) { b.y = H - b.r; b.vy *= -0.15; b.vx *= 0.985; }
+    }
+    for (let i = 0; i < bodies.length; i++) {
+      const a = bodies[i];
+      for (let j = i + 1; j < bodies.length; j++) {
+        const b = bodies[j];
+        const dx = b.x - a.x, dy = b.y - a.y, rr = a.r + b.r, d2 = dx * dx + dy * dy;
+        // 同じ人物どうしは「ほぼ接している」だけで合体（横並びで止まった時も合体するよう少し余裕を持たせる）
+        if (a.lv === b.lv && !a.dead && !b.dead && d2 < (rr + 1.5) * (rr + 1.5)) { a.dead = b.dead = true; merges.push([a, b]); continue; }
+        if (d2 >= rr * rr || d2 === 0) continue;
+        const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, ov = rr - d;
+        const ma = a.r * a.r, mb = b.r * b.r, mt = ma + mb;
+        a.x -= nx * ov * mb / mt; a.y -= ny * ov * mb / mt;
+        b.x += nx * ov * ma / mt; b.y += ny * ov * ma / mt;
+        const rvx = b.vx - a.vx, rvy = b.vy - a.vy, vn = rvx * nx + rvy * ny;
+        if (vn < 0) {
+          const jn = -(1.15) * vn / (1 / ma + 1 / mb);
+          a.vx -= jn / ma * nx; a.vy -= jn / ma * ny; b.vx += jn / mb * nx; b.vy += jn / mb * ny;
+          // 接線方向の摩擦
+          const tx = -ny, ty = nx, vt = rvx * tx + rvy * ty, jt = -vt * 0.08 / (1 / ma + 1 / mb);
+          a.vx -= jt / ma * tx; a.vy -= jt / ma * ty; b.vx += jt / mb * tx; b.vy += jt / mb * ty;
+        }
+      }
+    }
+  }
+  for (const b of bodies) { b.vx *= 0.995; b.vy *= 0.998; }
+  // 合体処理
+  for (const [a, b] of merges) {
+    const lv = a.lv, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    score += (lv + 1) * (lv + 2) / 2; // 本家同様の三角数スコア
+    effects.push({ x: mx, y: my, r: PEOPLE[lv].r * 1.3, t: 0 });
+    if (lv + 1 < PEOPLE.length) {
+      const nb = { id: nid++, x: mx, y: my, vx: (a.vx + b.vx) / 2, vy: Math.min(0, (a.vy + b.vy) / 2), r: PEOPLE[lv + 1].r, lv: lv + 1, born: performance.now() - 2000 };
+      bodies.push(nb); newborns.push(nb);
+    } // 最終段階同士は消える（本家のスイカ同士と同じ）
+  }
+  if (merges.length) {
+    bodies = bodies.filter(b => !b.dead); updateUI();
+    if (newborns.length) {
+      if (isWaiwai()) newborns.forEach(nb => playVoice(nb.lv, { body: nb }));
+      else { const top = newborns.reduce((m, nb) => nb.lv > m.lv ? nb : m); playVoice(top.lv, { body: top }); }
+    }
+  }
+  // ②わいわいモード：画面にいる全員が、自分のボイスが鳴り終わったら間をあけずに次を流す
+  if (isWaiwai()) {
+    const t = performance.now();
+    for (const b of bodies) {
+      if (t >= (b.nextTalk || 0)) {
+        if (!playVoice(b.lv, { ambient: true, body: b })) b.nextTalk = t; // 鳴らせなかった時は次のフレームで再挑戦
+      }
+    }
+  }
+  // ゲームオーバー判定：落下済みの人物がラインより上に一定時間とどまる
+  const now = performance.now();
+  const danger = bodies.some(b => now - b.born > 1200 && b.y - b.r < LINE && Math.abs(b.vy) < 1.5);
+  overTimer = danger ? overTimer + 1 : 0;
+  if (overTimer > 90 && !over) {
+    over = true;
+    document.getElementById("finalScore").textContent = "スコア：" + score;
+    document.getElementById("over").classList.add("show");
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  // デンジャーライン
+  const warn = bodies.some(b => b.y - b.r < LINE + 40 && performance.now() - b.born > 1200);
+  ctx.setLineDash([8, 6]); ctx.strokeStyle = warn ? "#e5533c" : "rgba(226,183,122,.8)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, LINE); ctx.lineTo(W, LINE); ctx.stroke(); ctx.setLineDash([]);
+  // 照準
+  if (!over) {
+    const r = PEOPLE[cur].r, x = Math.max(r, Math.min(W - r, aimX));
+    ctx.strokeStyle = "rgba(90,59,28,.15)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, TOP); ctx.lineTo(x, H); ctx.stroke();
+    if (canDrop) { ctx.globalAlpha = 1; drawPerson(ctx, x, TOP, r, cur); }
+  }
+  for (const b of bodies) drawPerson(ctx, b.x, b.y, b.r, b.lv);
+  // 吹き出し（しゃべっている人物）
+  const tnow = performance.now();
+  ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const b of bodies) {
+    if (!b.talk || b.talk < tnow) continue;
+    const txt = PEOPLE[b.lv].line || "♪", w = ctx.measureText(txt).width + 14, h = 20;
+    const bx = Math.max(w / 2 + 2, Math.min(W - w / 2 - 2, b.x)), by = Math.max(h / 2 + 2, b.y - b.r - 14);
+    ctx.globalAlpha = Math.min(1, (b.talk - tnow) / 300);
+    ctx.fillStyle = "#fff"; ctx.strokeStyle = "#e2b77a"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(bx - w / 2, by - h / 2, w, h, 9); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(b.x - 4, by + h / 2 - 1); ctx.lineTo(b.x, by + h / 2 + 6); ctx.lineTo(b.x + 4, by + h / 2 - 1); ctx.fill();
+    ctx.fillStyle = "#5a3b1c"; ctx.fillText(txt, bx, by);
+    ctx.globalAlpha = 1;
+  }
+  // 合体エフェクト
+  for (const e of effects) {
+    e.t++; ctx.strokeStyle = `rgba(255,200,80,${1 - e.t / 20})`; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (0.6 + e.t / 25), 0, Math.PI * 2); ctx.stroke();
+  }
+  effects = effects.filter(e => e.t < 20);
+}
+
+function loop() { if (!over) step(); render(); requestAnimationFrame(loop); }
+
+// ===== 入力 =====
+function toX(e) { const rc = cv.getBoundingClientRect(); return (e.clientX - rc.left) / rc.width * W; }
+cv.addEventListener("pointermove", e => { aimX = toX(e); });
+cv.addEventListener("pointerdown", e => { ensureAudio(); aimX = toX(e); });
+cv.addEventListener("pointerup", e => { ensureAudio(); aimX = toX(e); drop(); });
+document.getElementById("retry").onclick = reset;
+document.getElementById("reset").onclick = reset;
+
+// ===== しんか表・顔写真・ボイス設定 =====
+const chain = document.getElementById("chain"), fileIn = document.getElementById("file"), vIn = document.getElementById("vfile");
+const $ = id => document.getElementById(id);
+let target = -1;
+function buildChain() {
+  chain.innerHTML = "";
+  PEOPLE.forEach((p, i) => {
+    const d = document.createElement("div"), c = document.createElement("canvas");
+    c.width = 88; c.height = 88; drawPerson(c.getContext("2d"), 44, 44, 40, i);
+    d.appendChild(c); d.appendChild(document.createTextNode(p.name));
+    const m = document.createElement("span"); m.className = "vmark"; m.textContent = voiceBufs[i] ? "♪ 録音ボイス" : "";
+    d.appendChild(m);
+    if (i === target) d.classList.add("sel");
+    d.onclick = () => { ensureAudio(); target = i; openEditor(); buildChain(); playVoice(i, { force: true }); };
+    chain.appendChild(d);
+  });
+}
+function openEditor() {
+  const p = PEOPLE[target];
+  $("editor").hidden = false; $("edName").textContent = p.name; $("edLine").value = p.line;
+  const c = $("edCv").getContext("2d"); c.clearRect(0, 0, 80, 80); drawPerson(c, 40, 40, 36, target);
+  $("bClearVoice").hidden = !voiceBufs[target];
+}
+$("edLine").oninput = e => { PEOPLE[target].line = e.target.value; };
+$("bPlay").onclick = () => { ensureAudio(); playVoice(target, { force: true }); };
+$("bPhoto").onclick = () => fileIn.click();
+$("bVoice").onclick = () => { ensureAudio(); vIn.click(); };
+$("bClearVoice").onclick = () => { voiceBufs[target] = null; openEditor(); buildChain(); };
+fileIn.onchange = () => {
+  const f = fileIn.files[0]; if (!f) return;
+  const img = new Image();
+  img.onload = () => { photos[target] = img; buildChain(); openEditor(); updateUI(); };
+  img.src = URL.createObjectURL(f); fileIn.value = "";
+};
+vIn.onchange = async () => {
+  const f = vIn.files[0]; if (!f) return; vIn.value = "";
+  try {
+    ensureAudio();
+    const buf = await actx.decodeAudioData(await f.arrayBuffer());
+    voiceBufs[target] = buf; openEditor(); buildChain(); playVoice(target, { force: true });
+  } catch (e) { $("edName").textContent = PEOPLE[target].name + "（この音声ファイルは読み込めませんでした）"; }
+};
+
+// 同梱ボイスの読み込み（録音ファイルがある人物は合成音声の代わりにこれを使う）
+async function loadBundledVoices() {
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  await Promise.all(PEOPLE.map(async (p, i) => {
+    if (!p.voice) return;
+    try {
+      const res = await fetch(p.voice);
+      voiceBufs[i] = await actx.decodeAudioData(await res.arrayBuffer());
+    } catch (e) { console.warn("voice load failed", p.voice, e); }
+  }));
+  buildChain(); if (target >= 0) openEditor();
+}
+
+buildChain(); reset(); loop(); loadBundledVoices();
+</script>
+<script>
+// オフラインでも遊べるようにファイルを端末に保存する
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
