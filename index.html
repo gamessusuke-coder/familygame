@@ -59,7 +59,7 @@
   select { font: inherit; font-size: 12px; border: 1px solid #e6cfa8; border-radius: 8px; padding: 4px; color: #5a3b1c; background: #fff; }
   .chk { font-size: 12px; cursor: pointer; }
   .chk span { font-size: 10px; color: #a07a4f; }
-  .chk input { accent-color: #f08a3c; transform: scale(1.2); margin-right: 4px; }
+  .chk input[type=checkbox] { accent-color: #f08a3c; transform: scale(1.2); margin-right: 4px; }
   /* ===== タイトル画面 ===== */
   #title { position: fixed; inset: 0; z-index: 50; background: radial-gradient(circle at 50% 35%, #fff7e6 0%, #fde4c4 70%, #f7cf9c 100%);
            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
@@ -83,6 +83,13 @@
   .hrow { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
   .hrow .modeTag { margin-top: 0; }
   .backBtn { font-size: 11px; padding: 3px 10px; background: #fff; color: #a0602a; box-shadow: 0 2px 0 #e6cfa8; border: 1px solid #e6cfa8; }
+  .saveRow { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: #a07a4f; }
+  .saveRow { flex-wrap: wrap; }
+  .saveRow button { margin-left: auto; }
+  .row { flex-wrap: wrap; }
+  button { white-space: nowrap; }
+  #hitWrap, label.chk:has(#mute) { white-space: nowrap; }
+  .saveRow .ok { color: #3a9a5b; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -133,13 +140,21 @@
       <div class="btns">
         <button class="small" id="bPlay">▶ 試聴</button>
         <button class="small ghost" id="bVoice">声のファイルを選ぶ</button>
-        <button class="small ghost" id="bClearVoice" hidden>合成音声に戻す</button>
+        <button class="small ghost" id="bClearVoice" hidden>選んだ声を外す</button>
         <button class="small ghost" id="bPhoto">写真を選ぶ</button>
+        <button class="small ghost" id="bClearPhoto" hidden>写真を外す</button>
+      </div>
+      <div class="saveRow"><span id="saveStatus">設定はこの端末に自動で保存されます</span>
+        <button class="small ghost" id="bWipe">保存した設定をすべて消す</button>
       </div>
     </div>
     <div class="row">
       <label class="chk"><input type="checkbox" id="waiwai"> <b>わいわいモード</b><br><span>画面にいる全員がずっとしゃべり続けます</span></label>
       <div style="display:flex;gap:8px;align-items:center"><label class="chk" id="hitWrap" hidden><input type="checkbox" id="showHit"> 判定表示</label><label class="chk"><input type="checkbox" id="mute"> 消音</label><button id="reset" class="small">リセット</button></div>
+    </div>
+    <div class="row">
+      <label class="chk" style="flex:1;display:block;min-width:0">落とす間隔 <b id="cdVal">0.8</b> 秒<br>
+        <input type="range" id="cdRange" min="0.1" max="1.5" step="0.1" value="0.8" style="display:block;width:100%;margin:6px 0 0;box-sizing:border-box;accent-color:#f08a3c"></label>
     </div>
     <div class="row"><span>クリック / タップで落とす・ドラッグで位置合わせ</span></div>
   </div>
@@ -399,7 +414,8 @@ function drop() {
   }
   playVoice(cur, { body: nb });
   cur = next; next = rnd(); canDrop = false;
-  setTimeout(() => canDrop = true, 550);
+  dropReadyAt = performance.now() + dropWait * 1000;
+  setTimeout(() => canDrop = true, dropWait * 1000);
   updateUI();
 }
 
@@ -483,6 +499,11 @@ function commonStep() {
   }
 }
 
+// ウェイト中は次の人物を薄く表示し、だんだん濃くする（待ち時間が分かるように）
+function waitAlpha() {
+  const left = Math.max(0, dropReadyAt - performance.now()) / (dropWait * 1000);
+  return 0.15 + 0.45 * (1 - left);
+}
 function render() {
   ctx.clearRect(0, 0, W, H);
   // デンジャーライン
@@ -495,12 +516,14 @@ function render() {
       const a = aimPos(), sh = getShape(cur);
       ctx.strokeStyle = "rgba(90,59,28,.15)"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, H); ctx.stroke();
-      if (canDrop) { ctx.drawImage(sh.img, a.x - sh.w / 2, a.y - sh.h / 2, sh.w, sh.h); if (showHit()) drawHitLocal(sh, a.x, a.y, 0, 0, 0); }
+      ctx.globalAlpha = canDrop ? 1 : waitAlpha();
+      ctx.drawImage(sh.img, a.x - sh.w / 2, a.y - sh.h / 2, sh.w, sh.h); ctx.globalAlpha = 1;
+      if (canDrop && showHit()) drawHitLocal(sh, a.x, a.y, 0, 0, 0);
     } else {
       const r = PEOPLE[cur].r, x = Math.max(r, Math.min(W - r, aimX));
       ctx.strokeStyle = "rgba(90,59,28,.15)"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(x, TOP); ctx.lineTo(x, H); ctx.stroke();
-      if (canDrop) { ctx.globalAlpha = 1; drawPerson(ctx, x, TOP, r, cur); }
+      ctx.globalAlpha = canDrop ? 1 : waitAlpha(); drawPerson(ctx, x, TOP, r, cur); ctx.globalAlpha = 1;
     }
   }
   for (const b of bodies) {
@@ -529,6 +552,10 @@ function render() {
 }
 
 let paused = false;
+// ===== 落とす間隔（秒）：連打で落下中どうしが合体するのを防ぐウェイト =====
+const DEFAULT_DROP_WAIT = 0.8;
+let dropWait = (() => { try { const v = parseFloat(localStorage.getItem("kazoku-dropwait")); return v >= 0.1 && v <= 1.5 ? v : DEFAULT_DROP_WAIT; } catch (e) { return DEFAULT_DROP_WAIT; } })();
+let dropReadyAt = 0;
 function loop() { if (!over && !paused) step(); render(); requestAnimationFrame(loop); }
 
 // ===== ハードモード：写真（画像）の形どおりの当たり判定 =====
@@ -536,8 +563,9 @@ function loop() { if (!over && !paused) step(); render(); requestAnimationFrame(
 const shapes = new Array(PEOPLE.length).fill(null);
 let engine = null, walls = [], hardMerges = [];
 if (window.Matter) {
-  engine = Matter.Engine.create({ gravity: { x: 0, y: 1 } });
-  engine.positionIterations = 10; engine.velocityIterations = 8;
+  // enableSleeping：止まった人物を「休止」させ、地面との判定で小刻みに震え続けるのを防ぐ
+  engine = Matter.Engine.create({ gravity: { x: 0, y: 1 }, enableSleeping: true });
+  engine.positionIterations = 20; engine.velocityIterations = 10;
   const wo = { isStatic: true, friction: 0.5, restitution: 0 };
   walls = [
     Matter.Bodies.rectangle(W / 2, H + 50, W + 400, 100, wo),
@@ -671,21 +699,123 @@ function aimPos() {
   const y = Math.max(TOP - 20, -sh.top + 6);
   return { x, y };
 }
-function hardSpawn(lv, x, y, vel) {
+const GROW_FROM = 0.5, GROW_FRAMES = 15; // 合体で生まれた人物は小さく出て、0.25秒ほどで元の大きさに
+function hardSpawn(lv, x, y, vel, grow) {
   const sh = getShape(lv);
   const parts = sh.circles.map(c => Matter.Bodies.circle(x + c.x, y + c.y, c.r));
   const mb = Matter.Body.create({ parts, friction: 0.35, frictionStatic: 0.7, restitution: 0.05, frictionAir: 0.012 });
   const b = { id: nid++, x: mb.position.x, y: mb.position.y, vy: 0, r: y - (y + sh.top), lv, born: performance.now(),
               mb, sh, off: { x: x - mb.position.x, y: y - mb.position.y } };
+  // 重さの差を小さくする（面積比のままだと大人が子どもを押しつぶしてめり込みやすい）
+  Matter.Body.setMass(mb, PEOPLE[lv].r * 0.1);
   mb.plugin.w = b;
+  b.s = 1;
+  if (grow) { Matter.Body.scale(mb, GROW_FROM, GROW_FROM); b.s = GROW_FROM; }
   Matter.Composite.add(engine.world, mb);
   if (vel) Matter.Body.setVelocity(mb, vel);
   bodies.push(b);
   return b;
 }
+// めり込み解消：合体で大きい人物が生まれた時などに、他の人物や壁と重なったままになるのを防ぐ
+// （物理エンジンだけでは深いめり込みがなかなか解消されないため、位置を直接押し出して補正する）
+const PEN_TOL = 1.5;   // この深さ(px)までの人物どうしのめり込みは物理エンジンに任せる
+const WALL_TOL = 4;    // 壁・床へのはみ出しの許容(px)。小さすぎると物理エンジンと押し合って震える
+function blocked(m, dx, dy) {
+  return (dy > 0.3 && m.bounds.max.y >= H - 2) || (dx < -0.3 && m.bounds.min.x <= 2) || (dx > 0.3 && m.bounds.max.x >= W - 2);
+}
+function depenetrate() {
+  const list = bodies;
+  for (let iter = 0; iter < 6; iter++) {
+    let moved = false;
+    for (let i = 0; i < list.length; i++) {
+      const A = list[i].mb;
+      for (let j = i + 1; j < list.length; j++) {
+        const B = list[j].mb;
+        if (A.bounds.max.x < B.bounds.min.x || B.bounds.max.x < A.bounds.min.x ||
+            A.bounds.max.y < B.bounds.min.y || B.bounds.max.y < A.bounds.min.y) continue;
+        // いちばん深くめり込んでいる円の組を探し、その向きに押し離す
+        let best = 0, nx = 0, ny = 0;
+        for (let a = 1; a < A.parts.length; a++) {
+          const pa = A.parts[a];
+          for (let c = 1; c < B.parts.length; c++) {
+            const pb = B.parts[c];
+            const dx = pb.position.x - pa.position.x, dy = pb.position.y - pa.position.y;
+            const rr = pa.circleRadius + pb.circleRadius;
+            if (dx * dx + dy * dy >= rr * rr) continue;
+            const d = Math.sqrt(dx * dx + dy * dy) || 0.001, pen = rr - d;
+            if (pen > best) { best = pen; nx = dx / d; ny = dy / d; }
+          }
+        }
+        if (best <= PEN_TOL) continue;
+        // 床や壁に押しつけられている側は動かせないので、もう一方だけを動かす
+        const blockA = blocked(A, -nx, -ny), blockB = blocked(B, nx, ny);
+        let wA = B.mass / (A.mass + B.mass), wB = 1 - wA;
+        if (blockA && !blockB) { wA = 0; wB = 1; } else if (blockB && !blockA) { wA = 1; wB = 0; }
+        const push = (best - PEN_TOL) * 0.8;
+        Matter.Body.translate(A, { x: -nx * push * wA, y: -ny * push * wA });
+        Matter.Body.translate(B, { x: nx * push * wB, y: ny * push * wB });
+        Matter.Sleeping.set(A, false); Matter.Sleeping.set(B, false);
+        moved = true;
+      }
+    }
+    // 壁・床からはみ出していたら戻す
+    for (const b of list) {
+      const m = b.mb; let l = Infinity, r = -Infinity, bt = -Infinity;
+      for (let a = 1; a < m.parts.length; a++) {
+        const pt = m.parts[a], cr = pt.circleRadius;
+        l = Math.min(l, pt.position.x - cr); r = Math.max(r, pt.position.x + cr); bt = Math.max(bt, pt.position.y + cr);
+      }
+      const tx = l < -WALL_TOL ? -l : r > W + WALL_TOL ? W - r : 0, ty = bt > H + WALL_TOL ? H - bt : 0;
+      if (tx || ty) { Matter.Body.translate(m, { x: tx, y: ty }); Matter.Sleeping.set(m, false); moved = true; }
+    }
+    if (!moved) break;
+  }
+}
+const UPRIGHT_LIMIT = 45 * Math.PI / 180; // この角度までの傾きなら立ち直る
+const UPRIGHT_K = 0.2;                       // 立ち直る速さ（1フレームで傾きの2割ずつ戻す）
 function hardStep() {
   hardMerges = [];
+  // 合体直後の人物を少しずつ大きくする（周りの人物が自然に押し出される）
+  for (const b of bodies) {
+    if (b.s < 1) {
+      const ns = Math.min(1, b.s + (1 - GROW_FROM) / GROW_FRAMES);
+      Matter.Body.scale(b.mb, ns / b.s, ns / b.s); b.s = ns;
+      Matter.Body.setMass(b.mb, PEOPLE[b.lv].r * 0.1);
+      Matter.Sleeping.set(b.mb, false);
+    }
+  }
   Matter.Engine.update(engine, 1000 / 60);
+  depenetrate();
+  // 何かに接していて、ほぼ止まっている人物だけ動きを弱めて、早く静止（休止）させる
+  // （落下中の人物には効かせない）
+  const touching = new Set(), touchesPerson = new Set();
+  for (const pr of engine.pairs.list) {
+    if (!pr.isActive) continue;
+    const A = pr.bodyA.parent, B = pr.bodyB.parent;
+    touching.add(A); touching.add(B);
+    if (!A.isStatic && !B.isStatic) { touchesPerson.add(A); touchesPerson.add(B); }
+  }
+  for (const b of bodies) {
+    const m = b.mb;
+    if (!m.isSleeping && touching.has(m) && m.speed < 0.6 && Math.abs(m.angularVelocity) < 0.01) {
+      Matter.Body.setVelocity(m, { x: m.velocity.x * 0.5, y: m.velocity.y * 0.5 });
+      Matter.Body.setAngularVelocity(m, m.angularVelocity * 0.5);
+    }
+  }
+  // 立つ力：床にだけ立っていて（他の人物に触れていない）、傾きが小さい人物は、まっすぐ立つ向きに戻し、横にもすべらせない
+  // （当たり判定が円の集まりで足の裏が平らでないため、これがないと何もない床でも倒れてしまう）
+  for (const b of bodies) {
+    const m = b.mb;
+    // 一度でも他の人物に触れた人物には効かせない（触れたり離れたりで効いたり切れたりすると震えるため）
+    if (touchesPerson.has(m)) b.touchedPerson = true;
+    if (m.isSleeping || b.s < 1 || b.touchedPerson || !touching.has(m) || m.bounds.max.y < H - 3) continue;
+    const ang = Math.atan2(Math.sin(m.angle), Math.cos(m.angle)); // -π〜π に直す
+    if (Math.abs(ang) < UPRIGHT_LIMIT) {
+      Matter.Body.setAngularVelocity(m, -ang * UPRIGHT_K);
+      // 横すべり止め：何もない床では、落とした位置のまま止まる
+      Matter.Body.setVelocity(m, { x: 0, y: m.velocity.y });
+    }
+  }
   const newborns = [];
   for (const [a, b] of hardMerges) {
     const lv = a.lv, pa = a.mb.position, pb = b.mb.position;
@@ -695,10 +825,14 @@ function hardStep() {
     Matter.Composite.remove(engine.world, a.mb); Matter.Composite.remove(engine.world, b.mb);
     if (lv + 1 < PEOPLE.length) {
       const v = { x: (a.mb.velocity.x + b.mb.velocity.x) / 2, y: Math.min(0, (a.mb.velocity.y + b.mb.velocity.y) / 2) };
-      const nb = hardSpawn(lv + 1, mx, my, v); nb.born = performance.now() - 2000; newborns.push(nb);
+      const nb = hardSpawn(lv + 1, mx, my, v, true); nb.born = performance.now() - 2000; newborns.push(nb);
     }
   }
-  if (hardMerges.length) { bodies = bodies.filter(b => !b.dead); updateUI(); voiceNewborns(newborns); }
+  if (hardMerges.length) {
+    bodies = bodies.filter(b => !b.dead); updateUI(); voiceNewborns(newborns);
+    // 合体で人物が消えたら、上に乗っていた人物が宙に浮いたままにならないよう全員を起こす
+    for (const b of bodies) Matter.Sleeping.set(b.mb, false);
+  }
   for (const b of bodies) {
     const mb = b.mb; b.x = mb.position.x; b.y = mb.position.y; b.vy = mb.velocity.y; b.r = mb.position.y - mb.bounds.min.y;
   }
@@ -712,10 +846,14 @@ function drawHitLocal(sh, px, py, ang, ox, oy) {
 }
 function drawHardBody(b) {
   const mb = b.mb, sh = b.sh;
-  ctx.save(); ctx.translate(mb.position.x, mb.position.y); ctx.rotate(mb.angle);
+  ctx.save(); ctx.translate(mb.position.x, mb.position.y); ctx.rotate(mb.angle); ctx.scale(b.s, b.s);
   ctx.drawImage(sh.img, b.off.x - sh.w / 2, b.off.y - sh.h / 2, sh.w, sh.h);
   ctx.restore();
-  if (showHit()) drawHitLocal(sh, mb.position.x, mb.position.y, mb.angle, b.off.x, b.off.y);
+  if (showHit()) {
+    ctx.save(); ctx.strokeStyle = "rgba(229,83,60,.8)"; ctx.lineWidth = 1.2;
+    for (let i = 1; i < mb.parts.length; i++) { const pt = mb.parts[i]; ctx.beginPath(); ctx.arc(pt.position.x, pt.position.y, pt.circleRadius, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.restore();
+  }
 }
 
 // ===== 入力 =====
@@ -736,7 +874,7 @@ function buildChain() {
     const d = document.createElement("div"), c = document.createElement("canvas");
     c.width = 88; c.height = 88; drawThumb(c.getContext("2d"), 44, 44, 40, i);
     d.appendChild(c); d.appendChild(document.createTextNode(p.name));
-    const m = document.createElement("span"); m.className = "vmark"; m.textContent = voiceBufs[i] ? "♪ 録音ボイス" : "";
+    const m = document.createElement("span"); m.className = "vmark"; m.textContent = userVoice[i] ? "♪ 選んだ声" : voiceBufs[i] ? "♪ 録音ボイス" : "";
     d.appendChild(m);
     if (i === target) d.classList.add("sel");
     d.onclick = () => { ensureAudio(); target = i; openEditor(); buildChain(); playVoice(i, { force: true }); };
@@ -747,17 +885,33 @@ function openEditor() {
   const p = PEOPLE[target];
   $("editor").hidden = false; $("edName").textContent = p.name; $("edLine").value = p.line;
   const c = $("edCv").getContext("2d"); c.clearRect(0, 0, 80, 80); drawThumb(c, 40, 40, 36, target);
-  $("bClearVoice").hidden = !voiceBufs[target];
+  $("bClearVoice").hidden = !userVoice[target];
+  $("bClearPhoto").hidden = !photos[target];
 }
-$("edLine").oninput = e => { PEOPLE[target].line = e.target.value; };
+$("edLine").oninput = e => { PEOPLE[target].line = e.target.value; saveItem("line", target, e.target.value); };
 $("bPlay").onclick = () => { ensureAudio(); playVoice(target, { force: true }); };
 $("bPhoto").onclick = () => fileIn.click();
 $("bVoice").onclick = () => { ensureAudio(); vIn.click(); };
-$("bClearVoice").onclick = () => { voiceBufs[target] = null; openEditor(); buildChain(); };
+$("bClearVoice").onclick = () => {
+  voiceBufs[target] = bundledBufs[target] || null; userVoice[target] = false;
+  saveItem("voice", target, null); openEditor(); buildChain();
+};
+$("bClearPhoto").onclick = () => {
+  photos[target] = null; shapes[target] = null;
+  saveItem("photo", target, null); buildChain(); openEditor(); updateUI();
+};
+let wipeArmed = 0;
+$("bWipe").onclick = async () => {
+  if (Date.now() - wipeArmed > 3000) { wipeArmed = Date.now(); $("bWipe").textContent = "もう一度押すと消えます"; setTimeout(() => $("bWipe").textContent = "保存した設定をすべて消す", 3000); return; }
+  wipeArmed = 0; $("bWipe").textContent = "保存した設定をすべて消す";
+  await idb("clear");
+  PEOPLE.forEach((p, i) => { photos[i] = null; shapes[i] = null; userVoice[i] = false; voiceBufs[i] = bundledBufs[i] || null; p.line = DEFAULT_LINES[i]; });
+  buildChain(); if (target >= 0) openEditor(); updateUI(); flashSaved("保存した設定を消しました");
+};
 fileIn.onchange = () => {
   const f = fileIn.files[0]; if (!f) return;
   const img = new Image();
-  img.onload = () => { photos[target] = img; shapes[target] = null; buildChain(); openEditor(); updateUI(); };
+  img.onload = () => { photos[target] = img; shapes[target] = null; buildChain(); openEditor(); updateUI(); saveItem("photo", target, f); };
   img.src = URL.createObjectURL(f); fileIn.value = "";
 };
 vIn.onchange = async () => {
@@ -765,18 +919,81 @@ vIn.onchange = async () => {
   try {
     ensureAudio();
     const buf = await actx.decodeAudioData(await f.arrayBuffer());
-    voiceBufs[target] = buf; openEditor(); buildChain(); playVoice(target, { force: true });
+    voiceBufs[target] = buf; userVoice[target] = true; openEditor(); buildChain(); playVoice(target, { force: true });
+    saveItem("voice", target, f);
   } catch (e) { $("edName").textContent = PEOPLE[target].name + "（この音声ファイルは読み込めませんでした）"; }
 };
 
 // 同梱ボイスの読み込み（録音ファイルがある人物は合成音声の代わりにこれを使う）
+// ===== セーブ：写真・声・セリフを端末（IndexedDB）に保存し、起動時に復元する =====
+const bundledBufs = new Array(PEOPLE.length).fill(null);
+const userVoice = new Array(PEOPLE.length).fill(false);
+const DEFAULT_LINES = PEOPLE.map(p => p.line);
+let dbp = null;
+function openDB() {
+  if (!dbp) dbp = new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open("kazoku-game", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  });
+  return dbp;
+}
+async function idb(op, key, val) {
+  try {
+    const db = await openDB();
+    return await new Promise((res, rej) => {
+      const tx = db.transaction("kv", op === "get" || op === "keys" ? "readonly" : "readwrite"), st = tx.objectStore("kv");
+      const r = op === "get" ? st.get(key) : op === "put" ? st.put(val, key) : op === "del" ? st.delete(key) : op === "keys" ? st.getAllKeys() : st.clear();
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  } catch (e) { console.warn("save failed", e); return undefined; }
+}
+const keyOf = (kind, lv) => kind + ":" + PEOPLE[lv].name; // 人物名で保存（順番を変えても対応がずれない）
+async function saveItem(kind, lv, val) {
+  if (val === null || val === undefined) await idb("del", keyOf(kind, lv));
+  else {
+    // Blobはそのままだと一部のiPhoneで保存できないため、ArrayBuffer＋種類で保存する
+    const v = val instanceof Blob ? { type: val.type, data: await val.arrayBuffer() } : val;
+    await idb("put", keyOf(kind, lv), v);
+  }
+  flashSaved();
+}
+let flashT = 0;
+function flashSaved(msg) {
+  const el = $("saveStatus"); el.textContent = msg || "保存しました ✓"; el.className = "ok";
+  clearTimeout(flashT); flashT = setTimeout(() => { el.textContent = "設定はこの端末に自動で保存されます"; el.className = ""; }, 2000);
+}
+async function restoreSaved() {
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  await Promise.all(PEOPLE.map(async (p, i) => {
+    const line = await idb("get", keyOf("line", i));
+    if (typeof line === "string") p.line = line;
+    const ph = await idb("get", keyOf("photo", i));
+    if (ph && ph.data) {
+      await new Promise(res => {
+        const img = new Image();
+        img.onload = () => { photos[i] = img; shapes[i] = null; res(); }; img.onerror = res;
+        img.src = URL.createObjectURL(new Blob([ph.data], { type: ph.type }));
+      });
+    }
+    const vo = await idb("get", keyOf("voice", i));
+    if (vo && vo.data && actx) {
+      try { voiceBufs[i] = await actx.decodeAudioData(vo.data.slice(0)); userVoice[i] = true; } catch (e) {}
+    }
+  }));
+  buildChain(); if (target >= 0) openEditor(); updateUI();
+}
+
 async function loadBundledVoices() {
   try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
   await Promise.all(PEOPLE.map(async (p, i) => {
     if (!p.voice) return;
     try {
       const res = await fetch(p.voice);
-      voiceBufs[i] = await actx.decodeAudioData(await res.arrayBuffer());
+      bundledBufs[i] = await actx.decodeAudioData(await res.arrayBuffer());
+      if (!userVoice[i]) voiceBufs[i] = bundledBufs[i];
     } catch (e) { console.warn("voice load failed", p.voice, e); }
   }));
   buildChain(); if (target >= 0) openEditor();
@@ -804,6 +1021,11 @@ function startGame(m) {
 $("startSimple").onclick = () => startGame("simple");
 $("startHard").onclick = () => { if (engine) startGame("hard"); };
 $("toTitle").onclick = showTitle;
+$("cdRange").value = dropWait; $("cdVal").textContent = dropWait.toFixed(1);
+$("cdRange").oninput = e => {
+  dropWait = parseFloat(e.target.value); $("cdVal").textContent = dropWait.toFixed(1);
+  try { localStorage.setItem("kazoku-dropwait", dropWait); } catch (err) {}
+};
 // ゲーム中にタイトルへもどる（確認つき・確認中は一時停止）
 $("backBtn").onclick = () => {
   if (over || bodies.length === 0) { showTitle(); return; }
@@ -830,7 +1052,12 @@ function drawTitle(t) {
 }
 (function titleLoop(t) { drawTitle(t || 0); requestAnimationFrame(titleLoop); })();
 
-buildChain(); reset(); loop(); loadBundledVoices();
+buildChain(); reset(); loop();
+(async () => {
+  try { if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  await restoreSaved();      // 先に自分で設定したものを復元
+  await loadBundledVoices(); // 同梱ボイスは、自分の声がない人物にだけ使う
+})();
 showTitleBest();
 </script>
 <script>
